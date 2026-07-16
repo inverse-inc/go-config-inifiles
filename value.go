@@ -8,7 +8,9 @@ type value struct {
 
 func singleValue(s string) value { return value{lines: []string{s}} }
 
-func multiValue(lines []string) value { return value{lines: append([]string(nil), lines...), isMulti: true} }
+func multiValue(lines []string) value {
+	return value{lines: append([]string(nil), lines...), isMulti: true}
+}
 
 func (v value) scalar() string {
 	if len(v.lines) == 0 {

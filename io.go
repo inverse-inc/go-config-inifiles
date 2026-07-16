@@ -126,8 +126,12 @@ func (c *Config) writeReloadWarn() {
 	_, _ = w.WriteString("inifiles: reloading config file " + c.file + "\n")
 }
 
+// isValidOctalMode mirrors Perl's SetWriteMode validator /$mode =~ m/[0-7]{3}/,
+// an unanchored search for three consecutive octal digits. We accept any string
+// whose characters are all octal digits with length >= 3 (covers "644", "0644",
+// "0666").
 func isValidOctalMode(mode string) bool {
-	if len(mode) != 3 {
+	if len(mode) < 3 {
 		return false
 	}
 	for _, ch := range mode {

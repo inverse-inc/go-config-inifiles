@@ -66,32 +66,40 @@ type Options struct {
 	// ReloadWriter receives the reload warning message when ReloadWarn is
 	// true. Defaults to os.Stderr.
 	ReloadWriter *os.File
+
+	// ndExplicit records whether NegativeDeltas was set by an explicit
+	// option (used to avoid auto-enabling-shadowing a user override).
+	ndExplicit bool
 }
 
 func defaultOptions() Options {
 	return Options{
-		CommentChar:          '#',
-		AllowedCommentChars:  []rune{';'},
+		CommentChar:         '#',
+		AllowedCommentChars: []rune{';'},
 	}
 }
 
 // Option configures Options.
 type Option func(*Options)
 
-func WithImport(c *Config) Option               { return func(o *Options) { o.Import = c } }
-func WithDefault(name string) Option            { return func(o *Options) { o.Default = name } }
-func WithFallback(name string) Option           { return func(o *Options) { o.Fallback = name } }
-func WithNoCase(b bool) Option                  { return func(o *Options) { o.NoCase = b } }
-func WithReloadWarn(b bool) Option              { return func(o *Options) { o.ReloadWarn = b } }
-func WithNoMultiline(b bool) Option             { return func(o *Options) { o.NoMultiline = b } }
-func WithAllowContinue(b bool) Option           { return func(o *Options) { o.AllowContinue = b } }
-func WithAllowEmpty(b bool) Option              { return func(o *Options) { o.AllowEmpty = b } }
-func WithNegativeDeltas(b bool) Option          { return func(o *Options) { o.NegativeDeltas = b } }
-func WithCommentChar(r rune) Option             { return func(o *Options) { o.CommentChar = r } }
-func WithAllowedCommentChars(rs []rune) Option  { return func(o *Options) { o.AllowedCommentChars = rs } }
-func WithTrailingComment(b bool) Option         { return func(o *Options) { o.HandleTrailingComment = b } }
-func WithPHPCompat(b bool) Option               { return func(o *Options) { o.PHPCompat = b } }
-func WithReloadWriter(w *os.File) Option        { return func(o *Options) { o.ReloadWriter = w } }
+func WithImport(c *Config) Option     { return func(o *Options) { o.Import = c } }
+func WithDefault(name string) Option  { return func(o *Options) { o.Default = name } }
+func WithFallback(name string) Option { return func(o *Options) { o.Fallback = name } }
+func WithNoCase(b bool) Option        { return func(o *Options) { o.NoCase = b } }
+func WithReloadWarn(b bool) Option    { return func(o *Options) { o.ReloadWarn = b } }
+func WithNoMultiline(b bool) Option   { return func(o *Options) { o.NoMultiline = b } }
+func WithAllowContinue(b bool) Option { return func(o *Options) { o.AllowContinue = b } }
+func WithAllowEmpty(b bool) Option    { return func(o *Options) { o.AllowEmpty = b } }
+func WithNegativeDeltas(b bool) Option {
+	return func(o *Options) { o.NegativeDeltas = b; o.ndExplicit = true }
+}
+func WithCommentChar(r rune) Option { return func(o *Options) { o.CommentChar = r } }
+func WithAllowedCommentChars(rs []rune) Option {
+	return func(o *Options) { o.AllowedCommentChars = rs }
+}
+func WithTrailingComment(b bool) Option  { return func(o *Options) { o.HandleTrailingComment = b } }
+func WithPHPCompat(b bool) Option        { return func(o *Options) { o.PHPCompat = b } }
+func WithReloadWriter(w *os.File) Option { return func(o *Options) { o.ReloadWriter = w } }
 
 // validateCommentChars returns an error if ch or any rune in allowed is
 // invalid (alphanumeric or one of [ ] : =), matching the Perl module's

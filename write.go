@@ -225,6 +225,17 @@ func (c *Config) calcEOTMark(p *param, vals []string) string {
 }
 
 func (c *Config) writeFileTo(path string, delta bool) error {
+	// Mirror Perl's _write_config_to_filename: if the destination exists but is
+	// not writable, refuse to write. (The subsequent atomic temp+rename would
+	// otherwise bypass a read-only destination's mode.)
+	if _, err := os.Stat(path); err == nil {
+		w, werr := os.OpenFile(path, os.O_WRONLY, 0)
+		if werr != nil {
+			return werr
+		}
+		_ = w.Close()
+	}
+
 	dir := filepath.Dir(path)
 	if dir == "" {
 		dir = "."

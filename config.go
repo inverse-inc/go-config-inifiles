@@ -9,7 +9,7 @@ import (
 // Config::IniFiles. Use New, NewFromFile, NewFromReader, or NewFromBytes to
 // create one.
 type Config struct {
-	opts    Options
+	opts     Options
 	startup  Options // original options (minus Import) re-applied on Reload
 	imported *Config
 
@@ -19,13 +19,13 @@ type Config struct {
 	loaded    bool   // whether a read has been performed
 	reloadCnt int
 
-	errs        errorList
-	sections    []*section
-	sectIdx     map[string]*section
-	defaultSect string
-	fallback    string
+	errs         errorList
+	sections     []*section
+	sectIdx      map[string]*section
+	defaultSect  string
+	fallback     string
 	fallbackUsed bool
-	endComments []string
+	endComments  []string
 
 	groups     map[string][]string
 	groupOrder []string
@@ -69,19 +69,24 @@ func NewFromBytes(b []byte, opts ...Option) (*Config, error) {
 // SetFileName after) -- callers pass opts for nocase/comment/etc.
 func New(opts ...Option) *Config {
 	c := newConfig(opts...)
+	// Perl's new() always calls ReadConfig, which applies the import (and, with
+	// no file, returns immediately). Apply that import eagerly so a file-less
+	// config is usable right after construction.
+	c.resetState()
+	c.applyImport()
+	c.reloadCnt = 1
 	return c
 }
 
 func newConfig(opts ...Option) *Config {
 	o := defaultOptions()
-	// Import auto-enable happens first (mirrors Perl: import branch sets
-	// negativedeltas before the known-options loop), so an explicit user
-	// option applied afterwards overrides it.
-	if o.Import != nil {
-		o.NegativeDeltas = true
-	}
 	for _, opt := range opts {
 		opt(&o)
+	}
+	// Mirror Perl: importing an object auto-enables NegativeDeltas unless the
+	// caller passed an explicit WithNegativeDeltas option.
+	if o.Import != nil && !o.ndExplicit {
+		o.NegativeDeltas = true
 	}
 	return &Config{
 		opts:        o,
