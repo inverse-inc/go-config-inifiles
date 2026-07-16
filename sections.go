@@ -44,10 +44,12 @@ func (c *Config) sectionOf(sect string) *section {
 	return c.sectIdx[c.caseify(sect)]
 }
 
-// AddSection creates a section if it does not already exist.
+// AddSection creates a section if it does not already exist. It is idempotent:
+// re-adding an existing section is a no-op (returns nil). An empty sect returns
+// ErrEmptyArg.
 func (c *Config) AddSection(sect string) error {
 	if sect == "" {
-		return nil
+		return ErrEmptyArg
 	}
 	name := c.caseify(sect)
 	if _, ok := c.sectIdx[name]; ok {
@@ -68,8 +70,12 @@ func (c *Config) addSectionInternal(s *section, ourOwn bool) {
 }
 
 // DeleteSection removes sect and all its parameters, recording a tombstone for
-// delta output.
+// delta output. Deleting a missing section is a no-op (returns nil). An empty
+// sect returns ErrEmptyArg.
 func (c *Config) DeleteSection(sect string) error {
+	if sect == "" {
+		return ErrEmptyArg
+	}
 	name := c.caseify(sect)
 	s, ok := c.sectIdx[name]
 	if !ok {
@@ -90,19 +96,29 @@ func (c *Config) DeleteSection(sect string) error {
 
 // CopySection copies old into newName (no overwrite). When includeGroup is
 // true, group members of old are recursively copied to counterparts with the
-// name prefix replaced.
+// name prefix replaced; existing counterparts are skipped and the rest of the
+// group is still copied. An empty old or newName returns ErrEmptyArg. A missing
+// old section returns ErrNotFound. An existing destination returns
+// ErrAlreadyExists.
 func (c *Config) CopySection(old, newName string, includeGroup bool) error {
 	if old == "" || newName == "" {
-		return nil
+		return ErrEmptyArg
 	}
 	src := c.sectionOf(old)
 	if src == nil {
-		return nil
+		return ErrNotFound
 	}
 	newNameC := c.caseify(newName)
 	if _, ok := c.sectIdx[newNameC]; ok {
-		return nil
+		return ErrAlreadyExists
 	}
+	return c.copySectionInternal(src, newNameC, old, newName, includeGroup)
+}
+
+// copySectionInternal performs the copy assuming src is non-nil and the
+// destination does not exist. It recurses into group members, skipping any
+// counterpart whose destination already exists (continue copying the rest).
+func (c *Config) copySectionInternal(src *section, newNameC, old, newName string, includeGroup bool) error {
 	dst := deepCopySection(src)
 	dst.name = newNameC
 	dst.imported = false
@@ -111,7 +127,16 @@ func (c *Config) CopySection(old, newName string, includeGroup bool) error {
 	if includeGroup {
 		for _, member := range c.GroupMembers(old) {
 			repl := copySectionPrefix(member, old, newName)
-			_ = c.CopySection(member, repl, true)
+			// Skip counterparts whose destination already exists; continue
+			// with the remaining group members.
+			if c.sectionOf(repl) != nil {
+				continue
+			}
+			if msrc := c.sectionOf(member); msrc == nil {
+				continue
+			} else {
+				_ = c.copySectionInternal(msrc, c.caseify(repl), member, repl, true)
+			}
 		}
 	}
 	return nil

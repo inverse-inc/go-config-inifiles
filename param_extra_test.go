@@ -65,15 +65,16 @@ func TestSetVal_PHPCompatStripTail(t *testing.T) {
 	}
 }
 
-// DelVal is a no-op for empty names (covers the early-return branch).
+// DelVal returns ErrEmptyArg for empty sect or parm (covers the early-return
+// branch).
 func TestDelVal_EmptyInputs(t *testing.T) {
 	cfg := New()
 	cfg.NewVal("S", "p", "v")
-	if err := cfg.DelVal("", "p"); err != nil {
-		t.Errorf("DelVal(\"\",p) = %v, want nil", err)
+	if err := cfg.DelVal("", "p"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DelVal(\"\",p) = %v, want ErrEmptyArg", err)
 	}
-	if err := cfg.DelVal("S", ""); err != nil {
-		t.Errorf("DelVal(S,\"\") = %v, want nil", err)
+	if err := cfg.DelVal("S", ""); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DelVal(S,\"\") = %v, want ErrEmptyArg", err)
 	}
 	if _, ok := cfg.Val("S", "p"); !ok {
 		t.Errorf("Val(S,p) gone after empty DelVal")
@@ -227,14 +228,14 @@ func TestExists_Empty(t *testing.T) {
 	}
 }
 
-// NewVal with empty inputs is a no-op, and a single value + multi value paths.
+// NewVal returns ErrEmptyArg for empty sect/parm; single and multi value paths.
 func TestNewVal_EdgeBranches(t *testing.T) {
 	cfg := New()
-	if err := cfg.NewVal("", "p", "v"); err != nil {
-		t.Errorf("NewVal(\"\",p,v) = %v, want nil", err)
+	if err := cfg.NewVal("", "p", "v"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("NewVal(\"\",p,v) = %v, want ErrEmptyArg", err)
 	}
-	if err := cfg.NewVal("S", "", "v"); err != nil {
-		t.Errorf("NewVal(S,\"\",v) = %v, want nil", err)
+	if err := cfg.NewVal("S", "", "v"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("NewVal(S,\"\",v) = %v, want ErrEmptyArg", err)
 	}
 	// Zero values -> single empty value.
 	if err := cfg.NewVal("S", "z"); err != nil {
@@ -309,5 +310,25 @@ func TestVal_DefaultFallbackNotTriggeredForDefaultSectItself(t *testing.T) {
 	v, ok := cfg.Val("defaults", "shared")
 	if !ok || v != "v" {
 		t.Errorf("Val(defaults,shared) = (%q,%v), want (v,true)", v, ok)
+	}
+}
+
+// SetVal and PushVal return ErrEmptyArg for empty sect/parm (a clearer error
+// than the ErrNotFound that would otherwise result from a missing section).
+func TestSetValPushVal_EmptyArgs(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "p", "v")
+
+	if err := cfg.SetVal("", "p", "v"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("SetVal(\"\",p,v) = %v, want ErrEmptyArg", err)
+	}
+	if err := cfg.SetVal("S", "", "v"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("SetVal(S,\"\",v) = %v, want ErrEmptyArg", err)
+	}
+	if err := cfg.PushVal("", "p", "v"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("PushVal(\"\",p,v) = %v, want ErrEmptyArg", err)
+	}
+	if err := cfg.PushVal("S", "", "v"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("PushVal(S,\"\",v) = %v, want ErrEmptyArg", err)
 	}
 }

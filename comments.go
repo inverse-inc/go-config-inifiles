@@ -1,12 +1,14 @@
 package inifiles
 
-import "errors"
-
 // SetSectionComment sets the comment lines appearing above sect, prefixing any
 // line that lacks an allowed comment leader with "<commentChar> ". The section
-// is created if it does not exist. Returns the count of comment lines.
+// is created if it does not exist. Returns the count of comment lines. An
+// empty sect returns ErrEmptyArg. Passing no comments is a no-op (0, nil).
 func (c *Config) SetSectionComment(sect string, comments ...string) (int, error) {
-	if sect == "" || len(comments) == 0 {
+	if sect == "" {
+		return 0, ErrEmptyArg
+	}
+	if len(comments) == 0 {
 		return 0, nil
 	}
 	c.AddSection(sect)
@@ -26,8 +28,13 @@ func (c *Config) GetSectionComment(sect string) ([]string, bool) {
 	return append([]string(nil), s.comments...), true
 }
 
-// DeleteSectionComment removes the comment lines above sect.
+// DeleteSectionComment removes the comment lines above sect. Deleting the
+// comment on a missing section is a no-op (returns nil). An empty sect returns
+// ErrEmptyArg.
 func (c *Config) DeleteSectionComment(sect string) error {
+	if sect == "" {
+		return ErrEmptyArg
+	}
 	s := c.sectionOf(sect)
 	if s == nil {
 		return nil
@@ -39,9 +46,13 @@ func (c *Config) DeleteSectionComment(sect string) error {
 
 // SetParameterComment sets the comment lines appearing above sect.parm,
 // prefixing any line lacking an allowed comment leader. Returns the count of
-// comment lines.
+// comment lines. An empty sect or parm returns ErrEmptyArg. Passing no comments
+// is a no-op (0, nil).
 func (c *Config) SetParameterComment(sect, parm string, comments ...string) (int, error) {
-	if sect == "" || parm == "" || len(comments) == 0 {
+	if sect == "" || parm == "" {
+		return 0, ErrEmptyArg
+	}
+	if len(comments) == 0 {
 		return 0, nil
 	}
 	p := c.findParam(sect, parm)
@@ -75,8 +86,13 @@ func (c *Config) GetParameterComment(sect, parm string) ([]string, bool) {
 	return append([]string(nil), p.comments...), true
 }
 
-// DeleteParameterComment removes sect.parm's comment lines.
+// DeleteParameterComment removes sect.parm's comment lines. Deleting the
+// comment on a missing parameter is a no-op (returns nil). An empty sect or
+// parm returns ErrEmptyArg.
 func (c *Config) DeleteParameterComment(sect, parm string) error {
+	if sect == "" || parm == "" {
+		return ErrEmptyArg
+	}
 	p := c.findParam(sect, parm)
 	if p == nil {
 		return nil
@@ -87,14 +103,18 @@ func (c *Config) DeleteParameterComment(sect, parm string) error {
 }
 
 // SetParameterTrailingComment sets the end-of-line comment for sect.parm. The
-// parameter must exist.
+// parameter must exist; a missing parameter returns ErrNotFound. An empty sect
+// or parm returns ErrEmptyArg. An empty cmt is a no-op (returns nil).
 func (c *Config) SetParameterTrailingComment(sect, parm, cmt string) error {
-	if sect == "" || parm == "" || cmt == "" {
+	if sect == "" || parm == "" {
+		return ErrEmptyArg
+	}
+	if cmt == "" {
 		return nil
 	}
 	p := c.findParam(sect, parm)
 	if p == nil {
-		return errors.New("inifiles: parameter does not exist")
+		return ErrNotFound
 	}
 	p.touched = true
 	p.trailing = cmt

@@ -22,12 +22,15 @@ func TestNewFromReader_ReadError(t *testing.T) {
 	}
 }
 
-// SetFileName("") is a no-op returning nil (covers the empty-name early return).
+// SetFileName("") returns ErrEmptyArg and leaves the previously set name in
+// place (covers the empty-name early return).
 func TestSetFileName_EmptyNoop(t *testing.T) {
 	cfg := New()
-	cfg.SetFileName("/some/path")
-	if err := cfg.SetFileName(""); err != nil {
-		t.Errorf("SetFileName(\"\") = %v, want nil", err)
+	if err := cfg.SetFileName("/some/path"); err != nil {
+		t.Fatalf("SetFileName(/some/path): %v", err)
+	}
+	if err := cfg.SetFileName(""); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("SetFileName(\"\") = %v, want ErrEmptyArg", err)
 	}
 	if got := cfg.GetFileName(); got != "/some/path" {
 		t.Errorf("GetFileName() = %q after empty SetFileName, want /some/path", got)

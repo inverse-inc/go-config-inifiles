@@ -1,6 +1,20 @@
 package inifiles
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrNotFound is returned when a section or parameter does not exist.
+var ErrNotFound = errors.New("inifiles: section or parameter not found")
+
+// ErrEmptyArg is returned when a section, parameter, or other required
+// argument is the empty string.
+var ErrEmptyArg = errors.New("inifiles: empty section or parameter name")
+
+// ErrAlreadyExists is returned when a creation operation targets a section
+// or parameter that already exists.
+var ErrAlreadyExists = errors.New("inifiles: section already exists")
 
 // ParseError describes an error encountered while reading a config.
 type ParseError struct {

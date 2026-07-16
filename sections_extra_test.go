@@ -1,6 +1,7 @@
 package inifiles
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -54,24 +55,73 @@ func TestCopySectionPrefix(t *testing.T) {
 	}
 }
 
-// CopySection is a no-op when old/newName is empty, old doesn't exist, or the
-// destination already exists (covers the early-return branches).
+// CopySection with includeGroup=true skips a group member whose counterpart
+// destination already exists and continues copying the remaining members
+// (covers the continue branch at copySectionInternal:132-133).
+func TestCopySection_IncludeGroupSkipsExistingCounterpart(t *testing.T) {
+	cfg := New()
+	cfg.AddSection("g")
+	cfg.NewVal("g one", "k", "1")
+	cfg.NewVal("g two", "k", "2")
+	// Pre-create a counterpart destination for "g one" -> "X one".
+	cfg.NewVal("X one", "k", "preexisting")
+
+	if err := cfg.CopySection("g", "X", true); err != nil {
+		t.Fatalf("CopySection(g,X,true): %v", err)
+	}
+	// The pre-existing counterpart is NOT overwritten.
+	if v, ok := cfg.Val("X one", "k"); !ok || v != "preexisting" {
+		t.Errorf("Val(X one,k) = (%q,%v), want (preexisting,true) (not overwritten)", v, ok)
+	}
+	// The remaining member ("g two" -> "X two") is still copied.
+	if v, ok := cfg.Val("X two", "k"); !ok || v != "2" {
+		t.Errorf("Val(X two,k) = (%q,%v), want (2,true) (recursion continued)", v, ok)
+	}
+}
+
+// CopySection with includeGroup=true skips a group member that is listed in the
+// group but absent from sectIdx (covers the continue branch at
+// copySectionInternal:135-136). Injects a phantom member directly, in the same
+// in-package style as TestCoverageWriteToDeletedGuardsAndIsNil.
+func TestCopySection_IncludeGroupSkipsMissingMember(t *testing.T) {
+	cfg := New()
+	cfg.AddSection("g")
+	cfg.NewVal("g one", "k", "1")
+	// Inject a phantom member "g phantom" into group "g" that has no section.
+	cfg.groups["g"] = append(cfg.groups["g"], "g phantom")
+
+	if err := cfg.CopySection("g", "X", true); err != nil {
+		t.Fatalf("CopySection(g,X,true): %v", err)
+	}
+	// The real member is copied normally.
+	if v, ok := cfg.Val("X one", "k"); !ok || v != "1" {
+		t.Errorf("Val(X one,k) = (%q,%v), want (1,true)", v, ok)
+	}
+	// The phantom produced no section.
+	if cfg.SectionExists("X phantom") {
+		t.Errorf("SectionExists(X phantom) = true, want false (phantom member skipped)")
+	}
+}
+
+// CopySection returns ErrEmptyArg for empty names, ErrNotFound for a missing
+// source, and ErrAlreadyExists when the destination already exists (no
+// overwrite).
 func TestCopySection_NoopCases(t *testing.T) {
 	cfg := New()
 	cfg.NewVal("S", "k", "v")
 
-	if err := cfg.CopySection("", "T", false); err != nil {
-		t.Errorf("CopySection(\"\",...) = %v, want nil", err)
+	if err := cfg.CopySection("", "T", false); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("CopySection(\"\",...) = %v, want ErrEmptyArg", err)
 	}
-	if err := cfg.CopySection("S", "", false); err != nil {
-		t.Errorf("CopySection(...,\"\",...) = %v, want nil", err)
+	if err := cfg.CopySection("S", "", false); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("CopySection(...,\"\",...) = %v, want ErrEmptyArg", err)
 	}
-	if err := cfg.CopySection("NoSect", "T", false); err != nil {
-		t.Errorf("CopySection(NoSect,...) = %v, want nil", err)
+	if err := cfg.CopySection("NoSect", "T", false); !errors.Is(err, ErrNotFound) {
+		t.Errorf("CopySection(NoSect,...) = %v, want ErrNotFound", err)
 	}
-	// Destination exists: no-op (no overwrite).
-	if err := cfg.CopySection("S", "S", false); err != nil {
-		t.Errorf("CopySection(S,S) = %v, want nil", err)
+	// Destination exists: no overwrite.
+	if err := cfg.CopySection("S", "S", false); !errors.Is(err, ErrAlreadyExists) {
+		t.Errorf("CopySection(S,S) = %v, want ErrAlreadyExists", err)
 	}
 }
 
@@ -102,11 +152,11 @@ func TestRenameSection(t *testing.T) {
 	}
 }
 
-// RenameSection copying to a missing source returns nil (via CopySection).
+// RenameSection copying to a missing source returns ErrNotFound (via CopySection).
 func TestRenameSection_MissingSource(t *testing.T) {
 	cfg := New()
-	if err := cfg.RenameSection("NoSect", "T", false); err != nil {
-		t.Errorf("RenameSection(NoSect,...) = %v, want nil", err)
+	if err := cfg.RenameSection("NoSect", "T", false); !errors.Is(err, ErrNotFound) {
+		t.Errorf("RenameSection(NoSect,...) = %v, want ErrNotFound", err)
 	}
 }
 
@@ -152,13 +202,14 @@ func TestDelete_ClearsAll(t *testing.T) {
 	}
 }
 
-// AddSection is a no-op for the empty string and for an existing section.
+// AddSection returns ErrEmptyArg for the empty string and is a no-op (nil) for
+// an existing section.
 func TestAddSection_NoopCases(t *testing.T) {
 	cfg := New()
 	cfg.NewVal("S", "k", "v")
 
-	if err := cfg.AddSection(""); err != nil {
-		t.Errorf("AddSection(\"\") = %v, want nil", err)
+	if err := cfg.AddSection(""); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("AddSection(\"\") = %v, want ErrEmptyArg", err)
 	}
 	if err := cfg.AddSection("S"); err != nil {
 		t.Errorf("AddSection(S) existing = %v, want nil", err)
@@ -180,5 +231,33 @@ func TestDeleteSection_Missing(t *testing.T) {
 	cfg := New()
 	if err := cfg.DeleteSection("NoSect"); err != nil {
 		t.Errorf("DeleteSection(NoSect) = %v, want nil", err)
+	}
+}
+
+// DeleteSection returns ErrEmptyArg for the empty string.
+func TestDeleteSection_Empty(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "k", "v")
+	if err := cfg.DeleteSection(""); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DeleteSection(\"\") = %v, want ErrEmptyArg", err)
+	}
+	if !cfg.SectionExists("S") {
+		t.Errorf("SectionExists(S) = false after empty DeleteSection, want true")
+	}
+}
+
+// RenameSection returns ErrEmptyArg for empty names.
+func TestRenameSection_EmptyArgs(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "k", "v")
+	if err := cfg.RenameSection("", "T", false); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("RenameSection(\"\",T) = %v, want ErrEmptyArg", err)
+	}
+	if err := cfg.RenameSection("S", "", false); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("RenameSection(S,\"\") = %v, want ErrEmptyArg", err)
+	}
+	// Source unchanged.
+	if !cfg.SectionExists("S") {
+		t.Errorf("source S removed by empty-arg RenameSection")
 	}
 }

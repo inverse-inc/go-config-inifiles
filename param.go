@@ -1,10 +1,5 @@
 package inifiles
 
-import "errors"
-
-// ErrNotFound is returned when a section or parameter does not exist.
-var ErrNotFound = errors.New("inifiles: section or parameter not found")
-
 // Val returns the value of sect.parm joined with newlines if multi-valued. The
 // boolean reports whether the parameter (or a default-section fallback) was
 // found.
@@ -94,10 +89,10 @@ func (c *Config) findParam(sect, parm string) *param {
 
 // NewVal creates sect.parm with the given values, creating the section if
 // needed. If multiple values are given the parameter is multi-valued (here-doc
-// on output).
+// on output). An empty sect or parm returns ErrEmptyArg.
 func (c *Config) NewVal(sect, parm string, vals ...string) error {
 	if sect == "" || parm == "" {
-		return nil
+		return ErrEmptyArg
 	}
 	c.AddSection(sect)
 	s := c.sectionOf(sect)
@@ -129,8 +124,12 @@ func (c *Config) NewVal(sect, parm string, vals ...string) error {
 }
 
 // SetVal sets an existing parameter's value(s). Returns ErrNotFound if the
-// parameter does not already exist (use NewVal to create).
+// parameter does not already exist (use NewVal to create). An empty sect or
+// parm returns ErrEmptyArg.
 func (c *Config) SetVal(sect, parm string, vals ...string) error {
+	if sect == "" || parm == "" {
+		return ErrEmptyArg
+	}
 	s := c.sectionOf(sect)
 	if s == nil {
 		return ErrNotFound
@@ -157,8 +156,12 @@ func (c *Config) SetVal(sect, parm string, vals ...string) error {
 }
 
 // PushVal appends values to an existing multi-valued (or scalar -> array)
-// parameter. Returns ErrNotFound if the parameter does not exist.
+// parameter. Returns ErrNotFound if the parameter does not exist. An empty
+// sect or parm returns ErrEmptyArg. Passing no values is a no-op.
 func (c *Config) PushVal(sect, parm string, vals ...string) error {
+	if sect == "" || parm == "" {
+		return ErrEmptyArg
+	}
 	s := c.sectionOf(sect)
 	if s == nil {
 		return ErrNotFound
@@ -188,10 +191,12 @@ func (c *Config) PushVal(sect, parm string, vals ...string) error {
 	return nil
 }
 
-// DelVal deletes sect.parm, recording a tombstone for delta output.
+// DelVal deletes sect.parm, recording a tombstone for delta output. Deleting
+// a missing section or parameter is a no-op (returns nil). An empty sect or
+// parm returns ErrEmptyArg.
 func (c *Config) DelVal(sect, parm string) error {
 	if sect == "" || parm == "" {
-		return nil
+		return ErrEmptyArg
 	}
 	s := c.sectionOf(sect)
 	if s == nil {

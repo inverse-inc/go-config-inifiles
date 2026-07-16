@@ -1,6 +1,7 @@
 package inifiles
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -52,18 +53,19 @@ func TestSetParameterComment_OnNonExistentSection(t *testing.T) {
 	}
 }
 
-// empty inputs to SetParameterComment are no-ops (early return branch).
+// empty sect/parm to SetParameterComment return ErrEmptyArg; passing no
+// comments is a no-op (0, nil).
 func TestSetParameterComment_EmptyInputs(t *testing.T) {
 	cfg := New()
 	cfg.NewVal("S", "p", "v")
 	if n, err := cfg.SetParameterComment("S", "p"); err != nil || n != 0 {
 		t.Errorf("SetParameterComment(S,p) no comments = (n=%d err=%v), want (0,nil)", n, err)
 	}
-	if n, err := cfg.SetParameterComment("", "p", "c"); err != nil || n != 0 {
-		t.Errorf("SetParameterComment(\"\",p,c) = (n=%d err=%v), want (0,nil)", n, err)
+	if n, err := cfg.SetParameterComment("", "p", "c"); !errors.Is(err, ErrEmptyArg) || n != 0 {
+		t.Errorf("SetParameterComment(\"\",p,c) = (n=%d err=%v), want (0,ErrEmptyArg)", n, err)
 	}
-	if n, err := cfg.SetParameterComment("S", "", "c"); err != nil || n != 0 {
-		t.Errorf("SetParameterComment(S,\"\",c) = (n=%d err=%v), want (0,nil)", n, err)
+	if n, err := cfg.SetParameterComment("S", "", "c"); !errors.Is(err, ErrEmptyArg) || n != 0 {
+		t.Errorf("SetParameterComment(S,\"\",c) = (n=%d err=%v), want (0,ErrEmptyArg)", n, err)
 	}
 }
 
@@ -87,23 +89,28 @@ func TestSetParameterComment_PHPCompatStripTail(t *testing.T) {
 	}
 }
 
-// SetParameterTrailingComment errors when the parameter doesn't exist, and is
-// a no-op when sect, parm, or comment is empty.
+// SetParameterTrailingComment returns ErrNotFound when the parameter doesn't
+// exist, ErrEmptyArg when sect/parm are empty, and is a no-op when the comment
+// is empty.
 func TestSetParameterTrailingComment_ErrorAndNoop(t *testing.T) {
 	cfg := New()
 	cfg.NewVal("S", "p", "v")
 
-	if err := cfg.SetParameterTrailingComment("S", "ghost", "c"); err == nil {
-		t.Errorf("SetParameterTrailingComment on missing param: want error, got nil")
+	if err := cfg.SetParameterTrailingComment("S", "ghost", "c"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("SetParameterTrailingComment on missing param = %v, want ErrNotFound", err)
 	}
+	// Empty sect/parm -> ErrEmptyArg.
 	for _, args := range []struct{ s, p, c string }{
 		{"", "p", "c"},
 		{"S", "", "c"},
-		{"S", "p", ""},
 	} {
-		if err := cfg.SetParameterTrailingComment(args.s, args.p, args.c); err != nil {
-			t.Errorf("SetParameterTrailingComment(%q,%q,%q) = err %v, want nil", args.s, args.p, args.c, err)
+		if err := cfg.SetParameterTrailingComment(args.s, args.p, args.c); !errors.Is(err, ErrEmptyArg) {
+			t.Errorf("SetParameterTrailingComment(%q,%q,%q) = %v, want ErrEmptyArg", args.s, args.p, args.c, err)
 		}
+	}
+	// Empty comment -> no-op, nil.
+	if err := cfg.SetParameterTrailingComment("S", "p", ""); err != nil {
+		t.Errorf("SetParameterTrailingComment(S,p,\"\") = %v, want nil", err)
 	}
 }
 
@@ -136,5 +143,37 @@ func TestDeleteParameterComment_Noop(t *testing.T) {
 	cfg.NewVal("S", "p", "v")
 	if err := cfg.DeleteParameterComment("S", "ghost"); err != nil {
 		t.Errorf("DeleteParameterComment(S,ghost) = %v, want nil", err)
+	}
+}
+
+// DeleteSectionComment and DeleteParameterComment return ErrEmptyArg for empty
+// sect/parm.
+func TestDeleteComments_EmptyArgs(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "p", "v")
+	if _, err := cfg.SetSectionComment("S", "c"); err != nil {
+		t.Fatalf("SetSectionComment: %v", err)
+	}
+	if _, err := cfg.SetParameterComment("S", "p", "c"); err != nil {
+		t.Fatalf("SetParameterComment: %v", err)
+	}
+
+	if err := cfg.DeleteSectionComment(""); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DeleteSectionComment(\"\") = %v, want ErrEmptyArg", err)
+	}
+	// The existing comment is untouched.
+	if got, ok := cfg.GetSectionComment("S"); !ok || len(got) != 1 {
+		t.Errorf("GetSectionComment(S) after empty DeleteSectionComment = %v ok=%v, want 1 line", got, ok)
+	}
+
+	if err := cfg.DeleteParameterComment("", "p"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DeleteParameterComment(\"\",p) = %v, want ErrEmptyArg", err)
+	}
+	if err := cfg.DeleteParameterComment("S", ""); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DeleteParameterComment(S,\"\") = %v, want ErrEmptyArg", err)
+	}
+	// The existing parameter comment is untouched.
+	if got, ok := cfg.GetParameterComment("S", "p"); !ok || len(got) != 1 {
+		t.Errorf("GetParameterComment(S,p) after empty deletes = %v ok=%v, want 1 line", got, ok)
 	}
 }

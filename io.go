@@ -6,10 +6,11 @@ import (
 	"os"
 )
 
-// SetFileName sets the path used by Reload and Rewrite.
+// SetFileName sets the path used by Reload and Rewrite. An empty name returns
+// ErrEmptyArg.
 func (c *Config) SetFileName(name string) error {
 	if name == "" {
-		return nil
+		return ErrEmptyArg
 	}
 	c.file = name
 	return nil

@@ -1,14 +1,16 @@
 package inifiles
 
 // SetParameterEOT sets the here-doc terminator marker for the parameter.
-// Once set, the parameter serializes as a here-doc block on write.
+// Once set, the parameter serializes as a here-doc block on write. An empty
+// sect, parm, or eot returns ErrEmptyArg. A missing parameter returns
+// ErrNotFound.
 func (c *Config) SetParameterEOT(sect, parm, eot string) error {
 	if sect == "" || parm == "" || eot == "" {
-		return nil
+		return ErrEmptyArg
 	}
 	p := c.findParam(sect, parm)
 	if p == nil {
-		return nil
+		return ErrNotFound
 	}
 	p.touched = true
 	p.eot = eot
@@ -34,8 +36,13 @@ func (c *Config) GetParameterEOT(sect, parm string) string {
 }
 
 // DeleteParameterEOT removes the here-doc terminator marker from the parameter.
-// A multi-valued param reverts to the default "EOT" marker on output.
+// A multi-valued param reverts to the default "EOT" marker on output. Deleting
+// the marker on a missing parameter is a no-op (returns nil). An empty sect or
+// parm returns ErrEmptyArg.
 func (c *Config) DeleteParameterEOT(sect, parm string) error {
+	if sect == "" || parm == "" {
+		return ErrEmptyArg
+	}
 	p := c.findParam(sect, parm)
 	if p == nil {
 		return nil

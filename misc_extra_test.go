@@ -1,10 +1,12 @@
 package inifiles
 
 import (
+	"errors"
 	"testing"
 )
 
-// SetParameterEOT is a no-op for empty inputs or a missing parameter.
+// SetParameterEOT returns ErrEmptyArg for empty sect/parm/eot, and ErrNotFound
+// for a missing parameter (no EOT is recorded in either case).
 func TestSetParameterEOT_NoopCases(t *testing.T) {
 	cfg := New()
 	cfg.NewVal("S", "p", "v")
@@ -13,13 +15,13 @@ func TestSetParameterEOT_NoopCases(t *testing.T) {
 		{"S", "", "EOT"},
 		{"S", "p", ""},
 	} {
-		if err := cfg.SetParameterEOT(args.s, args.p, args.e); err != nil {
-			t.Errorf("SetParameterEOT(%q,%q,%q) = %v, want nil", args.s, args.p, args.e, err)
+		if err := cfg.SetParameterEOT(args.s, args.p, args.e); !errors.Is(err, ErrEmptyArg) {
+			t.Errorf("SetParameterEOT(%q,%q,%q) = %v, want ErrEmptyArg", args.s, args.p, args.e, err)
 		}
 	}
-	// Missing parameter: no-op, no EOT recorded.
-	if err := cfg.SetParameterEOT("S", "ghost", "EOT"); err != nil {
-		t.Errorf("SetParameterEOT(S,ghost,EOT) = %v, want nil", err)
+	// Missing parameter: ErrNotFound, no EOT recorded.
+	if err := cfg.SetParameterEOT("S", "ghost", "EOT"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("SetParameterEOT(S,ghost,EOT) = %v, want ErrNotFound", err)
 	}
 	if got := cfg.GetParameterEOT("S", "ghost"); got != "" {
 		t.Errorf("GetParameterEOT(S,ghost) = %q, want empty", got)
@@ -75,6 +77,23 @@ func TestDeleteParameterEOT(t *testing.T) {
 	}
 	if err := cfg.DeleteParameterEOT("NoSect", "p"); err != nil {
 		t.Errorf("DeleteParameterEOT(NoSect,p) = %v, want nil", err)
+	}
+}
+
+// DeleteParameterEOT returns ErrEmptyArg for empty sect/parm.
+func TestDeleteParameterEOT_EmptyArgs(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "p", "v")
+	cfg.SetParameterEOT("S", "p", "MARK")
+	if err := cfg.DeleteParameterEOT("", "p"); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DeleteParameterEOT(\"\",p) = %v, want ErrEmptyArg", err)
+	}
+	if err := cfg.DeleteParameterEOT("S", ""); !errors.Is(err, ErrEmptyArg) {
+		t.Errorf("DeleteParameterEOT(S,\"\") = %v, want ErrEmptyArg", err)
+	}
+	// The marker is untouched.
+	if got := cfg.GetParameterEOT("S", "p"); got != "MARK" {
+		t.Errorf("GetParameterEOT(S,p) = %q, want MARK (untouched)", got)
 	}
 }
 
