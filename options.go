@@ -70,7 +70,8 @@ type Options struct {
 
 func defaultOptions() Options {
 	return Options{
-		CommentChar: '#',
+		CommentChar:          '#',
+		AllowedCommentChars:  []rune{';'},
 	}
 }
 
