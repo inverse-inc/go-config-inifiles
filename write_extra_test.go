@@ -190,6 +190,32 @@ func TestEnsureEndComment(t *testing.T) {
 	}
 }
 
+// WriteFile surfaces an error when the atomic rename of the temp file to the
+// destination fails (writeFileTo rename branch). A NUL byte in the basename is
+// rejected by the filesystem while leaving the directory component valid, so
+// CreateTemp succeeds and the failure surfaces from os.Rename.
+func TestWriteFile_RenameError(t *testing.T) {
+	dir := t.TempDir()
+	badPath := filepath.Join(dir, "\x00bad-name")
+	cfg := New()
+	if err := cfg.NewVal("S", "k", "v"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.WriteFile(badPath); err == nil {
+		t.Errorf("WriteFile with NUL in basename = nil, want error")
+	}
+	// The temp file must have been cleaned up by the rename-error branch.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "temp.ini-") {
+			t.Errorf("leftover temp file after rename error: %s", e.Name())
+		}
+	}
+}
+
 // calcEOTMark grows the marker when the value contains the current mark.
 func TestCalcEOTMark(t *testing.T) {
 	cfg := New()
