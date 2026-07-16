@@ -27,10 +27,10 @@ type Config struct {
 	fallbackUsed bool
 	endComments []string
 
-	groups      map[string][]string
-	groupOrder  []string
+	groups     map[string][]string
+	groupOrder []string
 
-	deletedSections []deletedEntry // tombstones for delta output
+	mySects []*section // touched sections, ordered, retaining deleted tombstones
 }
 
 // NewFromFile creates a Config by reading the file at path.

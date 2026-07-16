@@ -1,5 +1,24 @@
 package inifiles
 
+// touchSection marks s as "ours" (mirrors _touch_section adding to mysects).
+func (c *Config) touchSection(s *section) {
+	if s.touched {
+		return
+	}
+	s.touched = true
+	c.mySects = append(c.mySects, s)
+}
+
+// touchParam marks p and its section as "ours" (mirrors _touch_parameter).
+func (c *Config) touchParam(s *section, p *param) {
+	c.touchSection(s)
+	if p.touched {
+		return
+	}
+	p.touched = true
+	s.myParms = append(s.myParms, p)
+}
+
 // Sections returns the ordered list of section names (including imported ones).
 func (c *Config) Sections() []string {
 	out := make([]string, 0, len(c.sections))
@@ -18,7 +37,6 @@ func (c *Config) SectionExists(sect string) bool {
 	return ok
 }
 
-// sectionOf returns the internal *section for sect (caseified), or nil.
 func (c *Config) sectionOf(sect string) *section {
 	if sect == "" {
 		return nil
@@ -26,16 +44,13 @@ func (c *Config) sectionOf(sect string) *section {
 	return c.sectIdx[c.caseify(sect)]
 }
 
-// AddSection creates a section if it does not already exist. Returns nil if
-// the section already existed (no-op success), and an error only if sect is
-// empty.
+// AddSection creates a section if it does not already exist.
 func (c *Config) AddSection(sect string) error {
 	if sect == "" {
 		return nil
 	}
 	name := c.caseify(sect)
-	if s, ok := c.sectIdx[name]; ok {
-		_ = s
+	if _, ok := c.sectIdx[name]; ok {
 		return nil
 	}
 	s := &section{name: name}
@@ -43,19 +58,17 @@ func (c *Config) AddSection(sect string) error {
 	return nil
 }
 
-// addSectionInternal registers a section, marks it touched (if ourOwn) and
-// enrolls it in any derived group.
 func (c *Config) addSectionInternal(s *section, ourOwn bool) {
 	c.sectIdx[s.name] = s
 	c.sections = append(c.sections, s)
 	if ourOwn {
-		s.touched = true
+		c.touchSection(s)
 	}
 	c.setGroupMember(s.name)
 }
 
-// DeleteSection removes sect and all its parameters. Returns nil on success or
-// if the section was absent.
+// DeleteSection removes sect and all its parameters, recording a tombstone for
+// delta output.
 func (c *Config) DeleteSection(sect string) error {
 	name := c.caseify(sect)
 	s, ok := c.sectIdx[name]
@@ -69,22 +82,15 @@ func (c *Config) DeleteSection(sect string) error {
 			break
 		}
 	}
-	if s.touched {
-		// Record as deleted for delta output but drop from ordering.
-		c.recordDeletedSection(name)
-	}
+	s.deleted = true
+	c.touchSection(s) // ensures it appears in delta as a deleted entry
 	c.removeGroupMember(name)
 	return nil
 }
 
-// recordDeletedSection keeps a tombstone for delta writes.
-func (c *Config) recordDeletedSection(name string) {
-	c.deletedSections = append(c.deletedSections, deletedEntry{name: name})
-}
-
-// CopySection copies old into new (no overwrite: returns an error if new
-// already exists). When includeGroup is true, group members of old are
-// recursively copied to counterparts with the name prefix replaced.
+// CopySection copies old into newName (no overwrite). When includeGroup is
+// true, group members of old are recursively copied to counterparts with the
+// name prefix replaced.
 func (c *Config) CopySection(old, newName string, includeGroup bool) error {
 	if old == "" || newName == "" {
 		return nil
@@ -95,11 +101,12 @@ func (c *Config) CopySection(old, newName string, includeGroup bool) error {
 	}
 	newNameC := c.caseify(newName)
 	if _, ok := c.sectIdx[newNameC]; ok {
-		return nil // Perl: CopySection returns undef if new already exists
+		return nil
 	}
 	dst := deepCopySection(src)
 	dst.name = newNameC
 	dst.imported = false
+	dst.touched = false
 	c.addSectionInternal(dst, true)
 	if includeGroup {
 		for _, member := range c.GroupMembers(old) {
@@ -134,18 +141,7 @@ func (c *Config) Delete() {
 	c.groups = map[string][]string{}
 	c.groupOrder = nil
 	c.endComments = nil
-	c.deletedSections = nil
-}
-
-// deletedEntry tracks section/param tombstones for delta writes.
-type deletedEntry struct {
-	name string
-	kind byte // 0=section, 1=param
-	sect string // for param deletes: owning section (caseified)
-}
-
-func (c *Config) recordDeletedParam(sect, name string) {
-	c.deletedSections = append(c.deletedSections, deletedEntry{name: name, kind: 1, sect: sect})
+	c.mySects = nil
 }
 
 func copySectionPrefix(member, old, newName string) string {

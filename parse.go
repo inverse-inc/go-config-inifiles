@@ -310,7 +310,7 @@ func (c *Config) newvalRaw(s *section, parm string, vals []string) {
 	if s.param(parm) != nil {
 		s.deleteParam(parm)
 	}
-	p := &param{name: parm, touched: true, val: singleValue("")}
+	p := &param{name: parm, val: singleValue("")}
 	if len(vals) > 1 {
 		p.val = multiValue(vals)
 		p.eot = "EOT"
@@ -321,13 +321,12 @@ func (c *Config) newvalRaw(s *section, parm string, vals []string) {
 		p.val = singleValue("")
 	}
 	s.addParam(p)
-	s.touched = true
+	c.touchParam(s, p)
 }
 
 // pushRaw appends values to an existing parameter, arrayifying a scalar first.
 func (c *Config) pushRaw(s *section, p *param, vals []string) {
-	p.touched = true
-	s.touched = true
+	c.touchParam(s, p)
 	if !p.hasEOT {
 		p.eot = "EOT"
 		p.hasEOT = true

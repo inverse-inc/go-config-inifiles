@@ -10,18 +10,19 @@ type param struct {
 	trailing string   // end-of-line comment (HandleTrailingComment only)
 	eot      string   // here-doc terminator marker; "" means unset -> defaults on output
 	hasEOT   bool     // whether an EOT was explicitly set; distinguishes "" marker from absent
-	touched  bool     // "ours" (for delta output)
-	deleted  bool     // delta deletion marker
+	touched  bool     // "ours" (in myparms)
+	deleted  bool     // delta deletion marker (kept in myParms as a tombstone)
 }
 
 // section holds an ordered section.
 type section struct {
 	name     string
-	params   []*param
+	params   []*param // live, ordered (all params incl imported; for normal output)
+	myParms  []*param // touched params, ordered, retaining deleted tombstones (for delta)
 	comments []string // lines above the section header (verbatim)
 	imported bool     // came via Import
-	touched  bool     // "ours" (mysects)
-	deleted  bool     // delta deletion marker
+	touched  bool     // "ours" (in mysects)
+	deleted  bool     // delta deletion marker (kept in mySects as a tombstone)
 }
 
 func (s *section) param(name string) *param {

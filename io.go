@@ -94,7 +94,7 @@ func (c *Config) resetState() {
 	c.endComments = nil
 	c.fallbackUsed = false
 	c.lineEnds = nil
-	c.deletedSections = nil
+	c.mySects = nil
 }
 
 func (c *Config) applyImport() {

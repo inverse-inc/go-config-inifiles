@@ -106,13 +106,14 @@ func (c *Config) NewVal(sect, parm string, vals ...string) error {
 		name = stripPHPTailArray(name)
 	}
 	if s.param(name) == nil {
-		s.addParam(&param{name: name, touched: true})
+		s.addParam(&param{name: name})
 	} else {
 		// Replace existing (mirrors newval overwriting in-file/imported value).
 		s.deleteParam(name)
-		s.addParam(&param{name: name, touched: true})
+		s.addParam(&param{name: name})
 	}
 	p := s.param(name)
+	c.touchParam(s, p)
 	if len(vals) > 1 {
 		p.val = multiValue(vals)
 		if !p.hasEOT {
@@ -130,19 +131,25 @@ func (c *Config) NewVal(sect, parm string, vals ...string) error {
 // SetVal sets an existing parameter's value(s). Returns ErrNotFound if the
 // parameter does not already exist (use NewVal to create).
 func (c *Config) SetVal(sect, parm string, vals ...string) error {
-	p := c.findParam(sect, parm)
+	s := c.sectionOf(sect)
+	if s == nil {
+		return ErrNotFound
+	}
+	name := c.caseify(parm)
+	if c.opts.PHPCompat {
+		name = stripPHPTailArray(name)
+	}
+	p := s.param(name)
 	if p == nil {
 		return ErrNotFound
 	}
-	p.touched = true
+	c.touchParam(s, p)
 	if len(vals) > 1 {
 		p.val = multiValue(vals)
 		p.eot = "EOT"
 		p.hasEOT = true
 	} else if len(vals) == 1 {
 		p.val = singleValue(vals[0])
-		// Setting to single collapses multi marker? Perl keeps EOT overwritten
-		// to 'EOT' on multi path only; single path leaves EOT as-is.
 	} else {
 		p.val = singleValue("")
 	}
@@ -152,19 +159,26 @@ func (c *Config) SetVal(sect, parm string, vals ...string) error {
 // PushVal appends values to an existing multi-valued (or scalar -> array)
 // parameter. Returns ErrNotFound if the parameter does not exist.
 func (c *Config) PushVal(sect, parm string, vals ...string) error {
-	p := c.findParam(sect, parm)
+	s := c.sectionOf(sect)
+	if s == nil {
+		return ErrNotFound
+	}
+	name := c.caseify(parm)
+	if c.opts.PHPCompat {
+		name = stripPHPTailArray(name)
+	}
+	p := s.param(name)
 	if p == nil {
 		return ErrNotFound
 	}
 	if len(vals) == 0 {
 		return nil
 	}
-	p.touched = true
+	c.touchParam(s, p)
 	if !p.hasEOT {
 		p.eot = "EOT"
 		p.hasEOT = true
 	}
-	// Arrayify scalar into single-element, then append.
 	lines := p.val.lines
 	if len(lines) == 0 {
 		lines = []string{""}
@@ -174,10 +188,7 @@ func (c *Config) PushVal(sect, parm string, vals ...string) error {
 	return nil
 }
 
-// DelVal deletes sect.parm. Returns ErrNotFound if the section/parameter does
-// not exist? Perl returns undef for undef sect/parm but success(1) even if the
-// param is absent (as long as sect/parm are defined). We mirror: nil if sect
-// and parm are non-empty.
+// DelVal deletes sect.parm, recording a tombstone for delta output.
 func (c *Config) DelVal(sect, parm string) error {
 	if sect == "" || parm == "" {
 		return nil
@@ -191,13 +202,9 @@ func (c *Config) DelVal(sect, parm string) error {
 		name = stripPHPTailArray(name)
 	}
 	if p := s.param(name); p != nil {
-		p.touched = true
-		if s != nil {
-			s.deleteParam(name)
-		}
-		if s.touched || c.imported != nil {
-			c.recordDeletedParam(s.name, name)
-		}
+		s.deleteParam(name)
+		p.deleted = true
+		c.touchParam(s, p)
 	}
 	return nil
 }
