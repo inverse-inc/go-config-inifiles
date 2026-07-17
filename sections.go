@@ -159,6 +159,46 @@ func (c *Config) Parameters(sect string) []string {
 	return s.paramNames()
 }
 
+// IsImported reports whether sect.parm originates from the imported config
+// (i.e., the section is imported and the parameter has not been locally modified).
+func (c *Config) IsImported(sect, parm string) bool {
+	if sect == "" || parm == "" {
+		return false
+	}
+	s := c.sectionOf(sect)
+	if s == nil || !s.imported {
+		return false
+	}
+	name := c.caseify(parm)
+	if c.opts.PHPCompat {
+		name = stripPHPTailArray(name)
+	}
+	p := s.param(name)
+	if p == nil {
+		return false
+	}
+	return !p.touched
+}
+
+// MyParameters returns the ordered parameter names of sect that are either in a
+// non-imported section or have been modified (touched).
+func (c *Config) MyParameters(sect string) []string {
+	s := c.sectionOf(sect)
+	if s == nil {
+		return nil
+	}
+	if !s.imported {
+		return s.paramNames()
+	}
+	var out []string
+	for _, p := range s.params {
+		if p.touched {
+			out = append(out, p.name)
+		}
+	}
+	return out
+}
+
 // Delete removes every section from the configuration.
 func (c *Config) Delete() {
 	c.sections = nil
@@ -233,10 +273,6 @@ func (c *Config) ResortSections(sects []string) error {
 // rebuildSectionsOrder re-seats c.sections to follow order, which must contain
 // exactly the currently-known section names (no duplicates, none missing).
 func (c *Config) rebuildSectionsOrder(order []string) {
-	if len(order) == 0 {
-		c.sections = nil
-		return
-	}
 	out := make([]*section, 0, len(order))
 	for _, n := range order {
 		out = append(out, c.sectIdx[n])

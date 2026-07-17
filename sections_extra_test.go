@@ -265,6 +265,23 @@ func TestResortSections_Noop(t *testing.T) {
 	}
 }
 
+// ResortSections with an empty list (or single element) is a no-op and returns
+// nil (mirrors Perl's early "nothing to resort" guard).
+func TestResortSections_Noop2(t *testing.T) {
+	cfg := New()
+
+	orig := cfg.Sections()
+	if err := cfg.ResortSections(nil); err != nil {
+		t.Errorf("ResortSections(nil) = %v, want nil", err)
+	}
+	if err := cfg.ResortSections([]string{"a"}); err != nil {
+		t.Errorf("ResortSections([a]) = %v, want nil", err)
+	}
+	if got := cfg.Sections(); !equalStrings(got, orig) {
+		t.Errorf("after noop ResortSections, Sections=%v, want %v", got, orig)
+	}
+}
+
 // ResortSections rejects an unknown section with ErrNotFound and leaves the
 // order intact (mirrors Perl's "any { !$self->SectionExists($_) }" failure).
 func TestResortSections_UnknownSection(t *testing.T) {
@@ -378,6 +395,145 @@ func TestRebuildSectionsOrder_Empty(t *testing.T) {
 	cfg.rebuildSectionsOrder(nil)
 	if got := cfg.Sections(); len(got) != 0 {
 		t.Errorf("Sections after empty rebuild = %v, want empty", got)
+	}
+}
+
+// MyParameters returns nil for a missing section and for an empty section name.
+func TestMyParameters_MissingSection(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "k", "v")
+	if got := cfg.MyParameters(""); got != nil {
+		t.Errorf("MyParameters(\"\") = %v, want nil", got)
+	}
+	if got := cfg.MyParameters("NoSect"); got != nil {
+		t.Errorf("MyParameters(NoSect) = %v, want nil", got)
+	}
+}
+
+// MyParameters on a non-imported section returns all parameter names.
+func TestMyParameters_NonImported(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "a", "1")
+	cfg.NewVal("S", "b", "2")
+	cfg.NewVal("S", "c", "3")
+	want := []string{"a", "b", "c"}
+	if got := cfg.MyParameters("S"); !equalStrings(got, want) {
+		t.Errorf("MyParameters(S) = %v, want %v", got, want)
+	}
+}
+
+// MyParameters on an imported section with no local changes returns nothing.
+func TestMyParameters_ImportedNoChanges(t *testing.T) {
+	base := New()
+	base.NewVal("S", "a", "1")
+	base.NewVal("S", "b", "2")
+
+	cfg := New(WithImport(base))
+	if got := cfg.MyParameters("S"); len(got) != 0 {
+		t.Errorf("MyParameters(S) on untouched import = %v, want empty", got)
+	}
+}
+
+// MyParameters on an imported section returns only the parameters that have
+// been locally modified.
+func TestMyParameters_ImportedWithChanges(t *testing.T) {
+	base := New()
+	base.NewVal("S", "a", "1")
+	base.NewVal("S", "b", "2")
+	base.NewVal("S", "c", "3")
+
+	cfg := New(WithImport(base))
+	cfg.SetVal("S", "b", "modified")
+	cfg.DelVal("S", "c")
+
+	// "b" was modified and "c" was deleted (removed from params), so "b" is the only one.
+	want := []string{"b"}
+	if got := cfg.MyParameters("S"); !equalStrings(got, want) {
+		t.Errorf("MyParameters(S) after SetVal(b),DelVal(c) = %v, want %v", got, want)
+	}
+}
+
+// MyParameters on an imported section includes newly added parameters.
+func TestMyParameters_ImportedNewParam(t *testing.T) {
+	base := New()
+	base.NewVal("S", "a", "1")
+
+	cfg := New(WithImport(base))
+	cfg.NewVal("S", "b", "2")
+
+	want := []string{"b"}
+	if got := cfg.MyParameters("S"); !equalStrings(got, want) {
+		t.Errorf("MyParameters(S) after NewVal(b) = %v, want %v", got, want)
+	}
+}
+
+// IsImported returns false for empty/missing section/param.
+func TestIsImported_EmptyOrMissing(t *testing.T) {
+	cfg := New()
+	if cfg.IsImported("", "k") {
+		t.Errorf("IsImported(\"\",k) = true, want false")
+	}
+	if cfg.IsImported("S", "") {
+		t.Errorf("IsImported(S,\"\") = true, want false")
+	}
+	if cfg.IsImported("NoSect", "k") {
+		t.Errorf("IsImported(NoSect,k) = true, want false")
+	}
+}
+
+// IsImported returns false for any parameter in a non-imported section.
+func TestIsImported_NonImported(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("S", "k", "v")
+	if cfg.IsImported("S", "k") {
+		t.Errorf("IsImported(S,k) on non-imported = true, want false")
+	}
+}
+
+// IsImported returns true for an untouched parameter from an imported section.
+func TestIsImported_ImportedUntouched(t *testing.T) {
+	base := New()
+	base.NewVal("S", "k", "v")
+	cfg := New(WithImport(base))
+	if !cfg.IsImported("S", "k") {
+		t.Errorf("IsImported(S,k) on untouched import = false, want true")
+	}
+}
+
+// IsImported returns false for a parameter that was modified after import.
+func TestIsImported_ImportedTouched(t *testing.T) {
+	base := New()
+	base.NewVal("S", "k", "v")
+	cfg := New(WithImport(base))
+	cfg.SetVal("S", "k", "modified")
+	if cfg.IsImported("S", "k") {
+		t.Errorf("IsImported(S,k) after SetVal = true, want false")
+	}
+}
+
+// IsImported returns false for a newly added parameter in an imported section.
+func TestIsImported_ImportedNewParam(t *testing.T) {
+	base := New()
+	base.NewVal("S", "a", "1")
+	cfg := New(WithImport(base))
+	cfg.NewVal("S", "b", "2")
+	if cfg.IsImported("S", "b") {
+		t.Errorf("IsImported(S,b) new param in imported section = true, want false")
+	}
+	// The original untouched param is still imported.
+	if !cfg.IsImported("S", "a") {
+		t.Errorf("IsImported(S,a) untouched original = false, want true")
+	}
+}
+
+// IsImported returns false for a deleted parameter.
+func TestIsImported_Deleted(t *testing.T) {
+	base := New()
+	base.NewVal("S", "k", "v")
+	cfg := New(WithImport(base))
+	cfg.DelVal("S", "k")
+	if cfg.IsImported("S", "k") {
+		t.Errorf("IsImported(S,k) after DelVal = true, want false")
 	}
 }
 
