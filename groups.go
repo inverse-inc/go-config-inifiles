@@ -19,7 +19,7 @@ func (c *Config) GroupMembers(group string) []string {
 	if c.opts.NoCase {
 		// Group keys are stored under the original-case first word as parsed
 		// from the section name (which, under nocase, is already lowercased).
-		g = toLower(group)
+		g = strings.ToLower(group)
 	}
 	members, ok := c.groups[g]
 	if !ok {
@@ -42,7 +42,7 @@ func (c *Config) setGroupMember(sect string) {
 	}
 	key := group
 	if c.opts.NoCase {
-		key = toLower(group)
+		key = strings.ToLower(group)
 	}
 	if _, exists := c.groups[key]; !exists {
 		c.groups[key] = nil
@@ -68,7 +68,7 @@ func (c *Config) removeGroupMember(sect string) {
 	}
 	key := group
 	if c.opts.NoCase {
-		key = toLower(group)
+		key = strings.ToLower(group)
 	}
 	members := c.groups[key]
 	for i, m := range members {

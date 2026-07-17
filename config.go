@@ -3,6 +3,7 @@ package inifiles
 import (
 	"errors"
 	"os"
+	"strings"
 )
 
 // Config is a parsed .ini configuration, ported from Perl's
@@ -108,7 +109,7 @@ func (c *Config) caseify(name string) string {
 
 func caseifiedName(name string, nocase bool) string {
 	if nocase {
-		return toLower(name)
+		return strings.ToLower(name)
 	}
 	return name
 }
