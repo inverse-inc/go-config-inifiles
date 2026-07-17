@@ -92,7 +92,7 @@ func TestWriteFile_AppliesExplicitMode(t *testing.T) {
 	p := filepath.Join(dir, "c.ini")
 	cfg := New()
 	cfg.NewVal("S", "k", "v")
-	cfg.SetWriteMode("0666")
+	cfg.SetWriteMode(0666)
 	if err := cfg.WriteFile(p); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}

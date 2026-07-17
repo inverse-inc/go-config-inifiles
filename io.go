@@ -1,7 +1,6 @@
 package inifiles
 
 import (
-	"errors"
 	"io"
 	"os"
 )
@@ -19,23 +18,16 @@ func (c *Config) SetFileName(name string) error {
 // GetFileName returns the configured file path (may be "").
 func (c *Config) GetFileName() string { return c.file }
 
-// SetWriteMode sets the file mode applied on WriteFile. mode must be three
-// octal digits (e.g. "644"); mirrors Perl's /[0-7]{3}/ validation.
-func (c *Config) SetWriteMode(mode string) error {
-	if !isValidOctalMode(mode) {
-		return errors.New("inifiles: invalid write mode (expect 3 octal digits)")
-	}
-	c.fileMode = parseOctalMode(mode)
-	return nil
+// SetWriteMode sets the file mode applied on WriteFile (only the permission
+// bits are used). Pass 0 to clear the recorded mode.
+func (c *Config) SetWriteMode(mode os.FileMode) {
+	c.fileMode = mode.Perm()
 }
 
-// GetWriteMode returns the configured file mode as an octal string (e.g.
-// "0644"), or "" if none.
-func (c *Config) GetWriteMode() string {
-	if c.fileMode == 0 {
-		return ""
-	}
-	return formatOctalMode(c.fileMode)
+// GetWriteMode returns the configured file mode (permission bits only), or 0
+// if none has been set.
+func (c *Config) GetWriteMode() os.FileMode {
+	return c.fileMode
 }
 
 // Errors returns the errors accumulated during the most recent read.
@@ -125,40 +117,4 @@ func (c *Config) writeReloadWarn() {
 	// We keep a simpler but equivalent message. Tests do not assert exact
 	// text; only that ReloadWarn prints something.
 	_, _ = w.WriteString("inifiles: reloading config file " + c.file + "\n")
-}
-
-// isValidOctalMode mirrors Perl's SetWriteMode validator /$mode =~ m/[0-7]{3}/,
-// an unanchored search for three consecutive octal digits. We accept any string
-// whose characters are all octal digits with length >= 3 (covers "644", "0644",
-// "0666").
-func isValidOctalMode(mode string) bool {
-	if len(mode) < 3 {
-		return false
-	}
-	for _, ch := range mode {
-		if ch < '0' || ch > '7' {
-			return false
-		}
-	}
-	return true
-}
-
-func parseOctalMode(mode string) os.FileMode {
-	var m os.FileMode
-	for _, ch := range mode {
-		m = m<<3 | os.FileMode(ch-'0')
-	}
-	return m
-}
-
-func formatOctalMode(m os.FileMode) string {
-	// Perl records mode as "%04o" (e.g. "0644").
-	const digits = "01234567"
-	out := make([]byte, 4)
-	out[0] = '0'
-	for i := 3; i >= 1; i-- {
-		out[i] = digits[m&7]
-		m >>= 3
-	}
-	return string(out)
 }

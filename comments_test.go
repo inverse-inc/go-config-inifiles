@@ -18,10 +18,8 @@ func TestComments_PreservationAndAccess(t *testing.T) {
 	if err := cfg.SetFileName(tmpPath); err != nil {
 		t.Fatalf("SetFileName: %v", err)
 	}
-	// Perl test uses SetWriteMode("0666"); the Go port currently rejects the
-	// 4-digit leading-zero form. Recorded as a gap, not fatal, so the rest of
-	// the comment assertions still run.
-	t.Logf("SetWriteMode note: %v", cfg.SetWriteMode("0666"))
+	// Perl test uses SetWriteMode("0666"); the Go port accepts an os.FileMode.
+	cfg.SetWriteMode(0666)
 	if err := cfg.WriteFile(tmpPath); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}

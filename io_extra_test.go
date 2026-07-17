@@ -37,47 +37,25 @@ func TestSetFileName_EmptyNoop(t *testing.T) {
 	}
 }
 
-// GetWriteMode returns "" when no mode has been set (covers the fileMode==0
-// branch), and the formatted octal string after a valid SetWriteMode.
+// GetWriteMode returns 0 when no mode has been set, and the perm bits after a
+// valid SetWriteMode.
 func TestGetWriteMode_NoModeAndRoundTrip(t *testing.T) {
 	cfg := New()
-	if got := cfg.GetWriteMode(); got != "" {
-		t.Errorf("GetWriteMode() = %q, want \"\" (no mode set)", got)
+	if got := cfg.GetWriteMode(); got != 0 {
+		t.Errorf("GetWriteMode() = %o, want 0 (no mode set)", got)
 	}
-	if err := cfg.SetWriteMode("644"); err != nil {
-		t.Fatalf("SetWriteMode(644): %v", err)
-	}
-	if got := cfg.GetWriteMode(); got != "0644" {
-		t.Errorf("GetWriteMode() = %q, want 0644", got)
+	cfg.SetWriteMode(0644)
+	if got := cfg.GetWriteMode(); got != 0644 {
+		t.Errorf("GetWriteMode() = %o, want 0644", got)
 	}
 }
 
-// SetWriteMode rejects non-octal digits and too-short strings.
-func TestSetWriteMode_Invalid(t *testing.T) {
+// SetWriteMode stores only the permission bits.
+func TestSetWriteMode_PermOnly(t *testing.T) {
 	cfg := New()
-	for _, m := range []string{"", "6", "64", "89a", "abc", "7777x"} {
-		if err := cfg.SetWriteMode(m); err == nil {
-			t.Errorf("SetWriteMode(%q) = nil, want error", m)
-		}
-	}
-}
-
-// isValidOctalMode / parseOctalMode / formatOctalMode direct unit tests.
-func TestOctalModeHelpers(t *testing.T) {
-	if !isValidOctalMode("644") {
-		t.Errorf("isValidOctalMode(644) = false, want true")
-	}
-	if !isValidOctalMode("0666") {
-		t.Errorf("isValidOctalMode(0666) = false, want true")
-	}
-	if isValidOctalMode("8") || isValidOctalMode("9ab") || isValidOctalMode("ab") {
-		t.Errorf("isValidOctalMode rejected 8/9ab/ab incorrectly true")
-	}
-	if got := formatOctalMode(parseOctalMode("0644")); got != "0644" {
-		t.Errorf("formatOctalMode(parseOctalMode(0644)) = %q, want 0644", got)
-	}
-	if got := formatOctalMode(parseOctalMode("0666")); got != "0666" {
-		t.Errorf("formatOctalMode(parseOctalMode(0666)) = %q, want 0666", got)
+	cfg.SetWriteMode(0777 | os.ModeSetuid)
+	if got := cfg.GetWriteMode(); got != 0777 {
+		t.Errorf("GetWriteMode() = %o, want 0777 (non-perm bits stripped)", got)
 	}
 }
 

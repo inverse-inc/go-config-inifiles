@@ -55,11 +55,9 @@ func TestMisc_DefaultOption(t *testing.T) {
 	if err := cfg.SetFileName(out); err != nil {
 		t.Fatalf("SetFileName: %v", err)
 	}
-	// 07misc passes SetWriteMode("0666"); the Go port validates the mode
-	// string to exactly three octal digits, so the equivalent is "666".
-	if err := cfg.SetWriteMode("666"); err != nil {
-		t.Fatalf("SetWriteMode: %v", err)
-	}
+	// 07misc passes SetWriteMode("0666"); the Go port accepts an os.FileMode,
+	// so the equivalent is 0666.
+	cfg.SetWriteMode(0666)
 
 	// val('test2','three') falls back to the default section's 'three'.
 	if v, ok := cfg.Val("test2", "three"); !ok || v != "value3" {
@@ -70,32 +68,22 @@ func TestMisc_DefaultOption(t *testing.T) {
 // SetWriteMode / GetWriteMode round-trip (07misc uses SetWriteMode("0666")).
 func TestMisc_SetGetWriteMode(t *testing.T) {
 	cfg := New()
-	// 07misc uses "0666"; the Go port requires three octal digits ("666") and
-	// formats it back as "0666".
-	if err := cfg.SetWriteMode("666"); err != nil {
-		t.Fatalf("SetWriteMode: %v", err)
-	}
-	if got := cfg.GetWriteMode(); got != "0666" {
-		t.Fatalf("GetWriteMode = %q, want \"0666\"", got)
-	}
-	if err := cfg.SetWriteMode("bad"); err == nil {
-		t.Fatalf("SetWriteMode with invalid mode should error")
+	// 07misc uses "0666"; the Go port accepts an os.FileMode and stores the
+	// permission bits.
+	cfg.SetWriteMode(0666)
+	if got := cfg.GetWriteMode(); got != 0666 {
+		t.Fatalf("GetWriteMode = %o, want 0666", got)
 	}
 }
 
 // 07misc.t/10delta.t pass mode strings like "0666" (a literal value, not the
-// octal). The Perl validator accepts any /\d{3}/ substring. The Go port instead
-// requires *exactly* three octal digits, so "0666" (four chars) is rejected.
-// This test documents the discrepancy; if SetWriteMode is later relaxed to
-// honor the Perl semantics, this test should flip to PASS.
+// octal). The Go port now accepts an os.FileMode directly, so 0666 (octal) is
+// the natural literal.
 func TestMisc_SetWriteMode0666PerlCompat(t *testing.T) {
 	cfg := New()
-	if err := cfg.SetWriteMode("0666"); err != nil {
-		t.Logf("SetWriteMode(\"0666\") rejected (Go requires exactly 3 octal digits): %v", err)
-		t.Skip("SetWriteMode does not yet accept the Perl \"0666\" literal; tracked as a port gap")
-	}
-	if got := cfg.GetWriteMode(); got != "0666" {
-		t.Fatalf("GetWriteMode = %q, want \"0666\"", got)
+	cfg.SetWriteMode(0666)
+	if got := cfg.GetWriteMode(); got != 0666 {
+		t.Fatalf("GetWriteMode = %o, want 0666", got)
 	}
 }
 
