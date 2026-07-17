@@ -169,6 +169,81 @@ func (c *Config) Delete() {
 	c.mySects = nil
 }
 
+// ResortSections reorders the given sections into the supplied order, keeping
+// every section not listed at its relative position around the reordered block
+// (mirrors Perl Config::IniFiles::ResortSections). Every name in sects must
+// refer to an existing section; otherwise ResortSections returns ErrNotFound
+// and leaves the order untouched. An empty sects list (or a single-element
+// list) is a no-op.
+func (c *Config) ResortSections(sects []string) error {
+	if len(sects) == 0 || len(sects) == 1 {
+		return nil
+	}
+	// Normalize to the storage form (caseified) and verify all exist.
+	names := make([]string, len(sects))
+	for i, s := range sects {
+		names[i] = c.caseify(s)
+		if _, ok := c.sectIdx[names[i]]; !ok {
+			return ErrNotFound
+		}
+	}
+
+	// Full reorder: the supplied list covers every existing section.
+	if len(c.sections) == len(names) {
+		c.rebuildSectionsOrder(names)
+		return nil
+	}
+
+	// Partial reorder: position the block where its first element currently is,
+	// keeping unlisted sections in their original order around it.
+	firstIndex := -1
+	for i, s := range c.sections {
+		if s.name == names[0] {
+			firstIndex = i
+			break
+		}
+	}
+	if firstIndex < 0 {
+		return ErrNotFound
+	}
+
+	temp := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		temp[n] = struct{}{}
+	}
+
+	var newOrder []*section
+	for i := 0; i <= firstIndex; i++ {
+		if _, in := temp[c.sections[i].name]; !in {
+			newOrder = append(newOrder, c.sections[i])
+		}
+	}
+	for _, n := range names {
+		newOrder = append(newOrder, c.sectIdx[n])
+	}
+	for i := firstIndex + 1; i < len(c.sections); i++ {
+		if _, in := temp[c.sections[i].name]; !in {
+			newOrder = append(newOrder, c.sections[i])
+		}
+	}
+	c.sections = newOrder
+	return nil
+}
+
+// rebuildSectionsOrder re-seats c.sections to follow order, which must contain
+// exactly the currently-known section names (no duplicates, none missing).
+func (c *Config) rebuildSectionsOrder(order []string) {
+	if len(order) == 0 {
+		c.sections = nil
+		return
+	}
+	out := make([]*section, 0, len(order))
+	for _, n := range order {
+		out = append(out, c.sectIdx[n])
+	}
+	c.sections = out
+}
+
 func copySectionPrefix(member, old, newName string) string {
 	if len(member) >= len(old) && member[:len(old)] == old {
 		return newName + member[len(old):]

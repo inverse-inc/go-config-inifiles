@@ -246,6 +246,153 @@ func TestDeleteSection_Empty(t *testing.T) {
 	}
 }
 
+// ResortSections with an empty list (or single element) is a no-op and returns
+// nil (mirrors Perl's early "nothing to resort" guard).
+func TestResortSections_Noop(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("a", "k", "1")
+	cfg.NewVal("b", "k", "2")
+
+	orig := cfg.Sections()
+	if err := cfg.ResortSections(nil); err != nil {
+		t.Errorf("ResortSections(nil) = %v, want nil", err)
+	}
+	if err := cfg.ResortSections([]string{"a"}); err != nil {
+		t.Errorf("ResortSections([a]) = %v, want nil", err)
+	}
+	if got := cfg.Sections(); !equalStrings(got, orig) {
+		t.Errorf("after noop ResortSections, Sections=%v, want %v", got, orig)
+	}
+}
+
+// ResortSections rejects an unknown section with ErrNotFound and leaves the
+// order intact (mirrors Perl's "any { !$self->SectionExists($_) }" failure).
+func TestResortSections_UnknownSection(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("a", "k", "1")
+	cfg.NewVal("b", "k", "2")
+	orig := cfg.Sections()
+
+	if err := cfg.ResortSections([]string{"a", "missing", "b"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("ResortSections with missing = %v, want ErrNotFound", err)
+	}
+	if got := cfg.Sections(); !equalStrings(got, orig) {
+		t.Errorf("order changed after failed ResortSections: %v, want %v", got, orig)
+	}
+}
+
+// ResortSections with the full set performs a complete reorder.
+func TestResortSections_Full(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("a", "k", "1")
+	cfg.NewVal("b", "k", "2")
+	cfg.NewVal("c", "k", "3")
+
+	if err := cfg.ResortSections([]string{"c", "a", "b"}); err != nil {
+		t.Fatalf("ResortSections: %v", err)
+	}
+	want := []string{"c", "a", "b"}
+	if got := cfg.Sections(); !equalStrings(got, want) {
+		t.Errorf("Sections=%v, want %v", got, want)
+	}
+}
+
+// ResortSections with a subset positions the block at its first element's
+// original location, leaving unlisted sections in their original order around
+// it (mirrors Perl's before/after split).
+func TestResortSections_Partial(t *testing.T) {
+	cfg := New()
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		cfg.NewVal(n, "k", "1")
+	}
+	// Reorder the subset {"e", "c"}: the block anchors on e's original position
+	// (index 4), so unlisted sections before it stay before and the block is
+	// appended after them (mirrors Perl's before/after split).
+	if err := cfg.ResortSections([]string{"e", "c"}); err != nil {
+		t.Fatalf("ResortSections: %v", err)
+	}
+	want := []string{"a", "b", "d", "e", "c"}
+	if got := cfg.Sections(); !equalStrings(got, want) {
+		t.Errorf("Sections=%v, want %v", got, want)
+	}
+}
+
+// ResortSections honors NoCase (names are compared/stored case-insensitively).
+func TestResortSections_NoCase(t *testing.T) {
+	cfg := New(WithNoCase(true))
+	cfg.NewVal("A", "k", "1")
+	cfg.NewVal("B", "k", "2")
+	cfg.NewVal("C", "k", "3")
+
+	if err := cfg.ResortSections([]string{"c", "A", "b"}); err != nil {
+		t.Fatalf("ResortSections: %v", err)
+	}
+	want := []string{"c", "a", "b"} // stored names are lower-cased
+	if got := cfg.Sections(); !equalStrings(got, want) {
+		t.Errorf("Sections=%v, want %v", got, want)
+	}
+}
+
+// ResortSections partial reorder where the anchor is not the last section, so
+// unlisted sections after it are preserved in order (covers the "after" split
+// loop body, which the previous partial test left untouched because the anchor
+// sat at the tail).
+func TestResortSections_PartialWithTrailing(t *testing.T) {
+	cfg := New()
+	for _, n := range []string{"a", "b", "c", "d", "e"} {
+		cfg.NewVal(n, "k", "1")
+	}
+	// Anchor "b" (index 1); reorder [b,d]; trailing a,c,e stay in place
+	// around the block.
+	if err := cfg.ResortSections([]string{"b", "d"}); err != nil {
+		t.Fatalf("ResortSections: %v", err)
+	}
+	want := []string{"a", "b", "d", "c", "e"}
+	if got := cfg.Sections(); !equalStrings(got, want) {
+		t.Errorf("Sections=%v, want %v", got, want)
+	}
+}
+
+// ResortSections defensive firstIndex<0 branch: sectIdx and c.sections are out
+// of sync (section present in sectIdx but missing from c.sections). ResortSections
+// then cannot locate names[0] in the ordered slice and returns ErrNotFound.
+// This state is not reachable through the public API; we inject it directly,
+// in the same in-package style as TestCopySection_IncludeGroupSkipsMissingMember.
+func TestResortSections_DefensiveFirstIndexNotFound(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("a", "k", "1")
+	cfg.NewVal("b", "k", "2")
+	// Drop "a" from the ordered slice only; keep it in sectIdx.
+	cfg.sections = cfg.sections[1:]
+
+	if err := cfg.ResortSections([]string{"a", "b"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("ResortSections with desynced c.sections = %v, want ErrNotFound", err)
+	}
+}
+
+// rebuildSectionsOrder empty-input branch (only reachable via direct call,
+// since ResortSections returns early for an empty list).
+func TestRebuildSectionsOrder_Empty(t *testing.T) {
+	cfg := New()
+	cfg.NewVal("a", "k", "1")
+	cfg.rebuildSectionsOrder(nil)
+	if got := cfg.Sections(); len(got) != 0 {
+		t.Errorf("Sections after empty rebuild = %v, want empty", got)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // RenameSection returns ErrEmptyArg for empty names.
 func TestRenameSection_EmptyArgs(t *testing.T) {
 	cfg := New()
