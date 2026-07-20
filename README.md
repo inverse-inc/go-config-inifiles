@@ -1,5 +1,7 @@
 # inifiles
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/inverse-inc/go-config-inifiles.svg)](https://pkg.go.dev/github.com/inverse-inc/go-config-inifiles)
+
 A Go port of the Perl [Config::IniFiles](https://metacpan.org/release/Config-IniFiles)
 module for reading and writing `.ini`-style configuration files.
 
