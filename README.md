@@ -28,7 +28,7 @@ the same round-trip-preservation guarantees hold, with an idiomatic Go API.
 ## Quick start
 
 ```go
-import "github.com/jarouzie/go-config-inifiles"
+import "github.com/inverse-inc/go-config-inifiles"
 
 cfg, err := inifiles.NewFromFile("config.ini")
 if err != nil { log.Fatal(err) }
