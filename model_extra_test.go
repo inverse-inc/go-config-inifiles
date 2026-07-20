@@ -21,7 +21,7 @@ func TestJoinCommentLines(t *testing.T) {
 // lineStartsWithComment: whitespace-only line returns false; line whose first
 // non-space rune is allowed returns true; not-allowed returns false.
 func TestLineStartsWithComment(t *testing.T) {
-	allowed := map[rune]bool{'#': true, ';': true}
+	allowed := map[rune]struct{}{'#': {}, ';': {}}
 	cases := []struct {
 		line string
 		want bool

@@ -20,9 +20,9 @@ func (c *Config) parse(data []byte) error {
 	c.lineEnds = lineEnds
 
 	// Allowed comment runes: allowed + commentChar.
-	allowed := map[rune]bool{c.opts.CommentChar: true}
+	allowed := map[rune]struct{}{c.opts.CommentChar: {}}
 	for _, r := range c.opts.AllowedCommentChars {
-		allowed[r] = true
+		allowed[r] = struct{}{}
 	}
 
 	ps := &parserState{lines: lines, allowed: allowed}
@@ -54,7 +54,7 @@ func (c *Config) parse(data []byte) error {
 type parserState struct {
 	lines   []string
 	idx     int
-	allowed map[rune]bool
+	allowed map[rune]struct{}
 
 	currSect string
 	currParm string
@@ -241,11 +241,11 @@ func (c *Config) processContinue(ps *parserState, val *string) {
 
 // splitTrailingComment splits value into (value, trailingComment) at the first
 // allowed comment char, mirroring /(.*?)\s*[$allCmt]\s*(.*)$/.
-func splitTrailingComment(val string, allowed map[rune]bool) (string, string) {
+func splitTrailingComment(val string, allowed map[rune]struct{}) (string, string) {
 	// Find first index of an allowed comment rune (after a non-empty value).
 	for i := 0; i < len(val); i++ {
 		r := rune(val[i])
-		if allowed[r] {
+		if _, exist := allowed[r]; exist {
 			left := val[:i]
 			right := val[i+1:]
 			// strip trailing whitespace of left

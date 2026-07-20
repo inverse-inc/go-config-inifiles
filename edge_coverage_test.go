@@ -46,9 +46,9 @@ func TestTrimLeadingWhitespace(t *testing.T) {
 
 func TestHereDocMarker(t *testing.T) {
 	cases := []struct {
-		in      string
-		wantS   string
-		wantOk  bool
+		in     string
+		wantS  string
+		wantOk bool
 	}{
 		{"<<EOT", "EOT", true},
 		{"<<MARK", "MARK", true},
@@ -82,12 +82,12 @@ func TestIsBlankCR(t *testing.T) {
 }
 
 func TestSplitTrailingCommentMultipleDelimiters(t *testing.T) {
-	allowed := map[rune]bool{'#': true, ';': true}
+	allowed := map[rune]struct{}{'#': {}, ';': {}}
 	val, ec := splitTrailingComment("hello ; world", allowed)
 	if val != "hello" || ec != "world" {
 		t.Errorf("splitTrailingComment = (%q, %q), want (hello, world)", val, ec)
 	}
-	allowed2 := map[rune]bool{'#': true}
+	allowed2 := map[rune]struct{}{'#': {}}
 	val2, ec2 := splitTrailingComment("hello ; world", allowed2)
 	if val2 != "hello ; world" || ec2 != "" {
 		t.Errorf("splitTrailingComment (# only) = (%q, %q), want (hello ; world, \"\")", val2, ec2)

@@ -97,10 +97,10 @@ func deepCopySection(s *section) *section {
 // comment leader is prefixed with "<commentChar> ". Lines already starting with
 // an allowed comment char (after optional whitespace) are kept verbatim.
 func markupComments(comments []string, commentChar rune, allowedRunes []rune) []string {
-	allowed := make(map[rune]bool)
-	allowed[commentChar] = true
+	allowed := make(map[rune]struct{})
+	allowed[commentChar] = struct{}{}
 	for _, r := range allowedRunes {
-		allowed[r] = true
+		allowed[r] = struct{}{}
 	}
 	prefix := string(commentChar) + " "
 	out := make([]string, 0, len(comments))
@@ -116,12 +116,13 @@ func markupComments(comments []string, commentChar rune, allowedRunes []rune) []
 
 // lineStartsWithComment reports whether line, after optional leading
 // whitespace, begins with one of the allowed comment runes.
-func lineStartsWithComment(line string, allowed map[rune]bool) bool {
+func lineStartsWithComment(line string, allowed map[rune]struct{}) bool {
 	i := 0
 	for i < len(line) {
 		r := rune(line[i])
 		if r != ' ' && r != '\t' {
-			return allowed[r]
+			_, exists := allowed[r]
+			return exists
 		}
 		i++
 	}
