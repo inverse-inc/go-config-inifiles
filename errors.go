@@ -23,6 +23,7 @@ type ParseError struct {
 	Context string
 }
 
+// Error returns the error string, including the line number when available.
 func (e *ParseError) Error() string {
 	if e.Line > 0 {
 		return fmt.Sprintf("%d: %s", e.Line, e.Message)
