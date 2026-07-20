@@ -74,16 +74,16 @@ func splitOnOrsRunes(s string, runes []rune) []string {
 	if s == "" {
 		return []string{""}
 	}
-	set := make(map[byte]bool, len(runes))
+	set := make(map[byte]struct{}, len(runes))
 	for _, r := range runes {
 		if r < 128 {
-			set[byte(r)] = true
+			set[byte(r)] = struct{}{}
 		}
 	}
 	out := []string{}
 	start := 0
 	for i := 0; i < len(s); i++ {
-		if set[s[i]] {
+		if _, exists := set[s[i]]; exists {
 			out = append(out, s[start:i])
 			start = i + 1
 		}
