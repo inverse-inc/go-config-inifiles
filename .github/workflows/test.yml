@@ -18,12 +18,14 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         go: [go.mod, stable]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: ${{ matrix.go == 'go.mod' && 'go.mod' || '' }}
           go-version: ${{ matrix.go == 'stable' && 'stable' || '' }}
+          # No dependencies, so there is no go.sum to key a cache on.
+          cache: false
 
       - name: Check formatting
         run: |
