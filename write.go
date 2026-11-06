@@ -107,6 +107,9 @@ func (c *Config) ensureEndComment(endComment string) string {
 }
 
 func (c *Config) writeTo(w io.Writer, delta bool) (int64, error) {
+	if err := validateCommentChars(c.opts.CommentChar, c.opts.AllowedCommentChars); err != nil {
+		return 0, err
+	}
 	ors := c.ors()
 	var b strings.Builder
 

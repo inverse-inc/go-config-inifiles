@@ -171,7 +171,7 @@ func (c *Config) paramAssignment(ps *parserState, parm, value string) bool {
 			// Ensure the fallback section exists (mirrors newval's AddSection).
 			c.AddSection(ps.currSect)
 		} else {
-			c.errs.addf(ps.idx, "%d: %s", ps.idx, "parameter found outside a section")
+			c.errs.add(ps.idx, "parameter found outside a section")
 			return false
 		}
 	}
@@ -186,7 +186,7 @@ func (c *Config) paramAssignment(ps *parserState, parm, value string) bool {
 		hasEOT = true
 		ok := c.readHereDoc(ps, eotmark, &vals)
 		if !ok {
-			c.errs.addf(ps.idx, `%d: %s`, ps.idx, `no end marker ("`+eotmark+`") found`)
+			c.errs.add(ps.idx, `no end marker ("`+eotmark+`") found`)
 			return false
 		}
 	} else {

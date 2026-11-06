@@ -3,7 +3,7 @@ package inifiles
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"unicode"
 )
 
@@ -15,7 +15,8 @@ type Options struct {
 	Import *Config
 
 	// Default is the section name consulted by Val when a parameter is
-	// missing in the requested section.
+	// missing in the requested section. The section is created after every
+	// read if the file does not contain it, so it is also written out.
 	Default string
 
 	// Fallback is the section into which parameters appearing before any
@@ -39,7 +40,10 @@ type Options struct {
 	// marker on read.
 	AllowContinue bool
 
-	// AllowEmpty permits empty config files; otherwise they are an error.
+	// AllowEmpty permits config files that contain no sections (including
+	// files with only comments or blank lines); otherwise they are an error.
+	// The check is made after imported sections are applied, so a config
+	// with Import set is only "empty" if the import has no sections either.
 	AllowEmpty bool
 
 	// NegativeDeltas parses "; [sect] is deleted" / "; parm is deleted"
@@ -47,12 +51,14 @@ type Options struct {
 	NegativeDeltas bool
 
 	// CommentChar is the primary comment character used to prefix synthetic
-	// comment lines. Must be a single non-alphanumeric, non-[]:= rune.
+	// comment lines. Must be a printable, non-alphanumeric rune other than
+	// [ ] : =. Invalid values are reported as errors when reading or writing.
 	CommentChar rune
 
 	// AllowedCommentChars are extra runes recognized as comment leaders in
 	// addition to CommentChar. Each must be printable and not alphanumeric
-	// or one of [ ] : =.
+	// or one of [ ] : =. Invalid values are reported as errors when reading
+	// or writing.
 	AllowedCommentChars []rune
 
 	// HandleTrailingComment parses "value ; comment" into value plus a
@@ -60,12 +66,14 @@ type Options struct {
 	HandleTrailingComment bool
 
 	// PHPCompat strips trailing "[]" from parameter names and unwraps
-	// quotes from values on read.
+	// quotes from values on read. The "[]" suffix is also stripped from
+	// parameter names passed to lookup and mutation methods (Val, SetVal,
+	// etc.), so "arr[]" and "arr" refer to the same parameter.
 	PHPCompat bool
 
 	// ReloadWriter receives the reload warning message when ReloadWarn is
 	// true. Defaults to os.Stderr.
-	ReloadWriter *os.File
+	ReloadWriter io.Writer
 
 	// ndExplicit records whether NegativeDeltas was set by an explicit
 	// option (used to avoid auto-enabling-shadowing a user override).
@@ -87,14 +95,19 @@ type Option func(*Options)
 func WithImport(c *Config) Option { return func(o *Options) { o.Import = c } }
 
 // WithDefault sets the section name consulted by Val when a parameter is
-// missing in the requested section.
+// missing in the requested section. The section is created after every read
+// if the file does not contain it, so it also appears in Sections and in
+// written output.
 func WithDefault(name string) Option { return func(o *Options) { o.Default = name } }
 
 // WithFallback sets the section into which parameters appearing before any
 // section header are filed.
 func WithFallback(name string) Option { return func(o *Options) { o.Fallback = name } }
 
-// WithNoCase controls case-insensitive section and parameter key matching.
+// WithNoCase controls whether section and parameter names are lowercased.
+// Names are stored lowercased (and written that way), and names passed to
+// lookups are lowercased too, so matching is case-insensitive. Values keep
+// their original case.
 func WithNoCase(b bool) Option { return func(o *Options) { o.NoCase = b } }
 
 // WithReloadWarn controls whether a reload notice is printed on each Reload
@@ -109,22 +122,28 @@ func WithNoMultiline(b bool) Option { return func(o *Options) { o.NoMultiline = 
 // line-continuation marker on read.
 func WithAllowContinue(b bool) Option { return func(o *Options) { o.AllowContinue = b } }
 
-// WithAllowEmpty controls whether an empty config file is accepted or treated
-// as an error.
+// WithAllowEmpty controls whether a config file with no sections is accepted
+// or treated as an error. A file containing only comments or blank lines has
+// no sections and counts as empty.
 func WithAllowEmpty(b bool) Option { return func(o *Options) { o.AllowEmpty = b } }
 
 // WithNegativeDeltas controls whether "; [sect] is deleted" / "; parm is
-// deleted" comments trigger deletions during read.
+// deleted" comments trigger deletions during read. This is enabled
+// automatically when WithImport is used; pass WithNegativeDeltas(false) to
+// turn it off.
 func WithNegativeDeltas(b bool) Option {
 	return func(o *Options) { o.NegativeDeltas = b; o.ndExplicit = true }
 }
 
 // WithCommentChar sets the primary comment character used to prefix synthetic
-// comment lines. Must be a single non-alphanumeric, non-[]:= rune.
+// comment lines. Must be a printable, non-alphanumeric rune other than
+// [ ] : =. Invalid values are reported as errors when reading or writing.
 func WithCommentChar(r rune) Option { return func(o *Options) { o.CommentChar = r } }
 
 // WithAllowedCommentChars sets extra runes recognized as comment leaders in
-// addition to CommentChar.
+// addition to CommentChar. Each must be a printable, non-alphanumeric rune
+// other than [ ] : =. Invalid values are reported as errors when reading or
+// writing.
 func WithAllowedCommentChars(rs []rune) Option {
 	return func(o *Options) { o.AllowedCommentChars = rs }
 }
@@ -136,19 +155,21 @@ func WithTrailingComment(b bool) Option {
 }
 
 // WithPHPCompat controls PHP-style "name[]" array-stripping and quote
-// unwrapping on read.
+// unwrapping on read. When enabled, a trailing "[]" is also stripped from
+// parameter names passed to lookup and mutation methods (Val, SetVal, etc.).
 func WithPHPCompat(b bool) Option { return func(o *Options) { o.PHPCompat = b } }
 
-// WithReloadWriter sets the *os.File that receives reload warning messages.
+// WithReloadWriter sets the writer that receives reload warning messages.
 // Defaults to os.Stderr.
-func WithReloadWriter(w *os.File) Option { return func(o *Options) { o.ReloadWriter = w } }
+func WithReloadWriter(w io.Writer) Option { return func(o *Options) { o.ReloadWriter = w } }
 
 // validateCommentChars returns an error if ch or any rune in allowed is
-// invalid (alphanumeric or one of [ ] : =), matching the Perl module's
-// restrictions.
+// invalid (non-printable, whitespace, alphanumeric, or one of [ ] : =),
+// matching the Perl module's restrictions.
 func validateCommentChars(ch rune, allowed []rune) error {
 	bad := func(r rune) bool {
-		return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '[' || r == ']' || r == ':' || r == '='
+		return !unicode.IsPrint(r) || unicode.IsSpace(r) || unicode.IsLetter(r) || unicode.IsDigit(r) ||
+			r == '[' || r == ']' || r == ':' || r == '='
 	}
 	if ch == 0 {
 		return errors.New("comment character must be unique")

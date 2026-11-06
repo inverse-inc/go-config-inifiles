@@ -42,9 +42,14 @@ func (c *Config) Errors() []ParseError {
 // Mirrors Perl's ReadConfig.
 func (c *Config) Reload() error {
 	if c.file == "" {
-		// No file: deep-copy imported data then done.
-		c.reloadCnt++
+		// No file: discard current state, deep-copy imported data, then done.
+		c.errs.reset()
+		c.resetState()
 		c.applyImport()
+		c.reloadCnt++
+		if c.opts.ReloadWarn && c.reloadCnt > 1 {
+			c.writeReloadWarn()
+		}
 		return nil
 	}
 	f, err := os.Open(c.file)
@@ -116,5 +121,5 @@ func (c *Config) writeReloadWarn() {
 	// Format mirrors Perl: "PID <pid> reloading config file <path> at <ts>".
 	// We keep a simpler but equivalent message. Tests do not assert exact
 	// text; only that ReloadWarn prints something.
-	_, _ = w.WriteString("inifiles: reloading config file " + c.file + "\n")
+	_, _ = io.WriteString(w, "inifiles: reloading config file "+c.file+"\n")
 }
